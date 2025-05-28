@@ -9,6 +9,8 @@ events.out.tfevents.*
 *log.txt
 *cookie.bin
 *.gradio/
+unsloth_compiled_cache/ 
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
