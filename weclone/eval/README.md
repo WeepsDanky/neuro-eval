@@ -1,265 +1,237 @@
 # WeClone Evaluation Framework
 
-A comprehensive evaluation system for testing conversational AI models with multi-metric benchmarking, plugin architecture, and extensive data persistence.
+A robust, extensible evaluation system for testing conversational AI models with comprehensive benchmarking capabilities.
 
 ## Features
 
-- **Multi-Metric Benchmarking**: Interaction Fluency, Sentiment Satisfaction, Task Success Rate, Latency, and Cost analysis
-- **Plugin Architecture**: Extensible metric system for custom evaluation criteria
-- **Multi-Model Testing**: Compare different models and prompt variants simultaneously
-- **Comprehensive Data Persistence**: All inputs, outputs, metrics, and metadata stored in structured formats
-- **Configuration-Driven**: YAML/JSON configuration files for easy setup and modification
-- **Async Processing**: Efficient parallel evaluation execution
+- **Modular Benchmark Architecture**: Each benchmark is a separate, configurable module
+- **Multi-Metric Evaluation**: Interaction fluency, sentiment satisfaction, task success, latency, and cost metrics
+- **YAML/JSON Configuration**: Flexible configuration management
+- **Comprehensive Data Persistence**: Structured CSV output with timestamped runs
+- **Multi-Model Support**: Test multiple models and prompt variants simultaneously
+- **Debug Mode**: Limited test cases for rapid iteration
 
-## Quick Start
+## Architecture
 
-### 1. Install Dependencies
+### Benchmark System
 
-The framework requires `pyyaml` for configuration parsing:
+The evaluation framework uses a plugin-based benchmark system where each benchmark is implemented as a separate module:
 
-```bash
-# Using uv (recommended)
-uv add pyyaml
-
-# Or using pip
-pip install pyyaml
+```
+weclone/eval/
+├── benchmark/
+│   ├── __init__.py              # Benchmark registry
+│   ├── base.py                  # Base classes and interfaces
+│   ├── interaction_fluency.py   # Conversation flow metrics
+│   ├── sentiment_satisfaction.py # User satisfaction analysis
+│   ├── task_success.py          # Task completion accuracy
+│   ├── latency.py              # Response timing metrics
+│   └── cost.py                 # API usage cost analysis
+├── framework.py                 # Core evaluation engine
+└── config/                     # Configuration examples
+    ├── debug_test.yaml
+    └── enhanced_benchmark_test.yaml
 ```
 
-### 2. Create Configuration File
+### Available Benchmarks
 
-Create an evaluation configuration file (e.g., `my_eval.yaml`):
+1. **Interaction Fluency** (`interaction_fluency`)
+   - Measures conversation flow and interruptions
+   - Metrics: interrupt_count, timeout_resend_count, avg_turn_interval
+
+2. **Sentiment Satisfaction** (`sentiment_satisfaction`) 
+   - Analyzes user satisfaction through sentiment analysis
+   - Metrics: post_chat_rating (1-5), sentiment_score (-1 to 1)
+
+3. **Task Success** (`task_success`)
+   - Evaluates task completion accuracy
+   - Metrics: retrieval_precision, gen_bleu, function_call_accuracy
+
+4. **Latency** (`latency`)
+   - Measures response timing performance
+   - Metrics: first_token_ms, full_response_ms, throughput_tokens_per_sec
+
+5. **Cost** (`cost`)
+   - Calculates API usage costs and efficiency
+   - Metrics: prompt_tokens, completion_tokens, usd_cost, cost_per_token
+
+## Configuration
+
+### Basic Configuration
 
 ```yaml
-batch_name: "my_evaluation"
-
-prompts:
-  - id: "friendly_assistant"
-    version: "v1.0"
-    content: "你是一个友善、有用的AI助手。"
-
 models:
   - name: "weclone:local"
     params:
       model: "gpt-3.5-turbo"
-      temperature: 0.7
       max_tokens: 150
-    host: "http://127.0.0.1:8005/v1"
-    api_key: "sk-test"
+      temperature: 0.7
+
+prompts:
+  - id: "default_system"
+    version: "1.0"
+    content: "你是一个友好的AI助手。"
 
 cases:
   - file: "dataset/test_data.json"
 
 metrics:
-  - interaction_fluency
-  - sentiment_satisfaction
-  - task_success
-  - latency
-  - cost
+  - "latency"
+  - "cost"
 ```
 
-### 3. Run Evaluation
+### Advanced Benchmark Configuration
+
+Each benchmark can be customized with specific parameters:
+
+```yaml
+benchmark_configs:
+  interaction_fluency:
+    interrupt_threshold_ms: 300
+    timeout_threshold_ms: 25000
+  
+  sentiment_satisfaction:
+    positive_words: ["好", "棒", "满意", "喜欢"]
+    negative_words: ["差", "糟糕", "不满", "讨厌"]
+    base_rating: 3.5
+    rating_sensitivity: 0.8
+  
+  cost:
+    model_pricing:
+      "gpt-3.5-turbo":
+        prompt: 0.0005
+        completion: 0.0015
+    excellent_cost_per_token: 0.000005
+```
+
+## Usage
+
+### Command Line Interface
 
 ```bash
-# Start the API server (in one terminal)
-python -m weclone.cli server
+# Run evaluation with specific config
+uv run python -m weclone.cli eval --config weclone/eval/config/debug_test.yaml
 
-# Run evaluation (in another terminal)
-python -m weclone.cli eval-framework --config my_eval.yaml
+# Debug mode with limited test cases
+uv run python -m weclone.cli eval --config weclone/eval/config/debug_test.yaml --debug 3
 ```
 
-## Configuration Reference
-
-### Model Configuration
-
-```yaml
-models:
-  - name: "model_identifier"
-    params:
-      model: "gpt-3.5-turbo"
-      temperature: 0.7
-      max_tokens: 150
-      # Any other OpenAI API parameters
-    host: "http://localhost:8005/v1"  # API endpoint
-    api_key: "your-api-key"           # Optional API key
-```
-
-### Prompt Configuration
-
-```yaml
-prompts:
-  - id: "prompt_identifier"
-    version: "v1.0"
-    content: "Your system prompt content here"
-  
-  # Or load from file
-  - id: "prompt_from_file"
-    version: "v1.1"
-    file: "path/to/prompt.txt"
-```
-
-### Test Cases
-
-#### JSON Format (Compatible with existing test_data.json)
-```json
-{
-  "questions": [
-    ["你好", "今天天气怎么样？"],
-    ["帮我写个故事"]
-  ]
-}
-```
-
-#### JSONL Format (New conversational format)
-```jsonl
-{"conv_id": "greeting", "conversation": [{"role": "user", "content": "你好"}, {"role": "assistant", "content": ""}, {"role": "user", "content": "今天过得怎么样？"}, {"role": "assistant", "content": ""}]}
-```
-
-### Available Metrics
-
-1. **Interaction Fluency (互动流畅度)**
-   - `interrupt_count`: Number of user interruptions
-   - `timeout_resend_count`: Number of timeout-triggered resends
-   - `avg_turn_interval`: Average time between conversation turns
-
-2. **Sentiment Satisfaction (情感满意度)**
-   - `post_chat_rating`: Overall satisfaction score (1-5)
-   - `sentiment_score`: Sentiment analysis score
-
-3. **Task Success (任务成功率)**
-   - `retrieval_precision`: Information retrieval accuracy
-   - `gen_bleu`: Text generation quality (BLEU-like score)
-   - `function_call_accuracy`: Function/tool usage accuracy
-
-4. **Latency (延迟)**
-   - `first_token_ms`: Time to first token (milliseconds)
-   - `full_response_ms`: Total response time (milliseconds)
-
-5. **Cost (成本)**
-   - `prompt_tokens`: Input token count
-   - `completion_tokens`: Output token count
-   - `usd_cost`: Estimated cost in USD
-
-## Output Structure
-
-Results are saved in the `eval_runs/` directory:
-
-```
-eval_runs/
-└── 20241228T142030Z_abc12345/
-    ├── run_meta.json          # Run metadata and configuration
-    ├── dataset.csv            # Test cases in CSV format
-    ├── metrics.csv            # Detailed metric results
-    └── latency_cost.csv       # Performance and cost data
-```
-
-### Output Files
-
-#### run_meta.json
-Contains run metadata, configuration, and enabled metrics.
-
-#### dataset.csv
-```csv
-conv_id,turn_idx,role,content
-0,0,user,"你好"
-0,1,assistant,"你好！有什么可以帮您的吗？"
-```
-
-#### metrics.csv
-```csv
-run_id,conv_id,model,prompt,metric,value
-20241228T142030Z_abc12345,0,weclone:local,friendly_assistant,sentiment_satisfaction.post_chat_rating,4.2
-```
-
-#### latency_cost.csv
-```csv
-run_id,conv_id,model,n_tokens_prompt,n_tokens_completion,latency_ms,cost_usd
-20241228T142030Z_abc12345,0,weclone:local,45,23,1250,0.000234
-```
-
-## Custom Metrics
-
-Create custom metrics by extending the `BaseMetric` class:
+### Programmatic Usage
 
 ```python
-from weclone.eval.framework import BaseMetric, JobContext
+from weclone.eval.framework import run_evaluation_from_config
 
-class CustomMetric(BaseMetric):
+# Run evaluation
+results = await run_evaluation_from_config("config/my_evaluation.yaml")
+
+# Access benchmark results
+for result in results:
+    conv_id = result["conv_id"]
+    latency_metrics = result["benchmark_results"]["latency"].metrics
+    cost_metrics = result["benchmark_results"]["cost"].metrics
+    
+    print(f"Conversation {conv_id}:")
+    print(f"  Latency: {latency_metrics['full_response_ms']}ms")
+    print(f"  Cost: ${cost_metrics['usd_cost']}")
+```
+
+## Creating Custom Benchmarks
+
+To create a new benchmark, inherit from `BaseBenchmark`:
+
+```python
+from weclone.eval.benchmark.base import BaseBenchmark, BenchmarkResult
+from weclone.eval.framework import JobContext
+
+class MyCustomBenchmark(BaseBenchmark):
     @property
-    def name(self) -> str:
-        return "custom_metric"
+    def _get_name(self) -> str:
+        return "my_custom_benchmark"
     
     def required_artifacts(self) -> List[str]:
         return ["conversation_text"]
     
-    def compute(self, job_ctx: JobContext) -> Dict[str, Any]:
-        # Your custom metric logic here
-        return {"custom_score": 0.85}
+    def compute(self, job_ctx: JobContext) -> BenchmarkResult:
+        # Your custom logic here
+        metrics = {"my_metric": 0.85}
+        
+        return BenchmarkResult(
+            benchmark_name=self.name,
+            metrics=metrics
+        )
 ```
 
-## Integration with Existing CLI
-
-The evaluation framework integrates seamlessly with the existing WeClone CLI:
-
-```bash
-# List all available commands
-python -m weclone.cli --help
-
-# Run the comprehensive evaluation
-python -m weclone.cli eval-framework --config eval_config.yaml
-
-# Run the simple test (existing functionality)
-python -m weclone.cli test-model
-```
-
-## Best Practices
-
-1. **Start the API Server**: Always ensure the API server is running before evaluation
-2. **Use Version Control**: Track configuration file versions for reproducible results
-3. **Monitor Costs**: Set `max_usd` limits in configuration to control API costs
-4. **Parallel Processing**: Adjust `parallel` setting based on API rate limits
-5. **Data Backup**: Archive evaluation results for historical comparison
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Connection Error**: Ensure API server is running on the correct port
-2. **Missing Dependencies**: Install `pyyaml` for configuration parsing
-3. **File Not Found**: Check that test case files exist and paths are correct
-4. **API Rate Limits**: Reduce `parallel` setting or add delays
-
-### Debug Mode
-
-Enable detailed logging by setting the log level:
+Then register it in `benchmark/__init__.py`:
 
 ```python
-import logging
-logging.getLogger("weclone.eval").setLevel(logging.DEBUG)
+AVAILABLE_BENCHMARKS = {
+    # ... existing benchmarks
+    'my_custom_benchmark': MyCustomBenchmark
+}
 ```
 
-## Examples
+## Output Format
 
-See the `weclone/eval/config/` directory for example configurations:
-
-- `example_eval.yaml`: Comprehensive example with all features
-- `additional_cases.jsonl`: Example JSONL test cases
-
-## Architecture
-
-The evaluation framework follows a plugin architecture:
+The framework generates structured outputs in timestamped directories:
 
 ```
-EvaluationFramework
-├── Configuration Loader (YAML/JSON)
-├── Test Case Loader (JSON/JSONL)
-├── Model Manager (OpenAI compatible)
-├── Metric Plugins
-│   ├── InteractionFluencyMetric
-│   ├── SentimentSatisfactionMetric
-│   ├── TaskSuccessMetric
-│   ├── LatencyMetric
-│   └── CostMetric
-└── Data Persistence (CSV/JSON)
+eval_runs/
+└── 20241201T143022Z_a1b2c3d4/
+    ├── run_meta.json           # Run metadata and configuration
+    ├── dataset.csv             # Complete conversation dataset
+    ├── benchmark_results.csv   # All benchmark metrics
+    └── latency_cost.csv       # Latency and cost summary
 ```
 
-This design allows for easy extension and modification of evaluation criteria without changing core functionality. 
+### CSV Output Structure
+
+**benchmark_results.csv**:
+```csv
+run_id,conv_id,model,prompt,benchmark,metric,value
+20241201T143022Z_a1b2c3d4,0,weclone:local,default_system,latency,full_response_ms,1234.56
+```
+
+**dataset.csv**:
+```csv
+conv_id,turn_idx,role,content
+0,0,user,你好
+0,1,assistant,你好！有什么可以帮助你的吗？
+```
+
+## Requirements
+
+```bash
+uv add openai pyyaml tqdm
+```
+
+## Debug Mode
+
+For rapid iteration during development:
+
+```yaml
+debug:
+  max_cases: 3  # Limit to 3 test cases
+```
+
+This allows quick testing of configuration changes without running the full evaluation suite.
+
+## API Server Setup
+
+Before running evaluations, ensure the API server is running:
+
+```bash
+# Start the WeClone API server
+uv run python -m weclone.cli server
+
+# Server runs on http://127.0.0.1:8005/v1 by default
+```
+
+## Configuration Schema
+
+Each benchmark provides its own configuration schema accessible via `get_config_schema()`. This enables IDE autocomplete and validation for benchmark-specific settings.
+
+The modular architecture makes it easy to:
+- Add new benchmarks without modifying core framework code
+- Configure benchmarks independently
+- Maintain and test benchmarks in isolation
+- Share benchmark implementations across projects 

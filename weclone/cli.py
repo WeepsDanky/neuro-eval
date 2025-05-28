@@ -146,14 +146,14 @@ def eval_framework(config: Path):
         if results:
             avg_metrics = {}
             for result in results:
-                for metric_name, scores in result["metrics"].items():
-                    if metric_name not in avg_metrics:
-                        avg_metrics[metric_name] = {}
-                    for score_name, score_value in scores.items():
-                        if isinstance(score_value, (int, float)):
-                            if score_name not in avg_metrics[metric_name]:
-                                avg_metrics[metric_name][score_name] = []
-                            avg_metrics[metric_name][score_name].append(score_value)
+                for benchmark_name, benchmark_result in result["benchmark_results"].items():
+                    if benchmark_name not in avg_metrics:
+                        avg_metrics[benchmark_name] = {}
+                    for metric_name, metric_value in benchmark_result.metrics.items():
+                        if isinstance(metric_value, (int, float)):
+                            if metric_name not in avg_metrics[benchmark_name]:
+                                avg_metrics[benchmark_name][metric_name] = []
+                            avg_metrics[benchmark_name][metric_name].append(metric_value)
             
             print("\n平均指标:")
             metric_names = {
@@ -164,12 +164,12 @@ def eval_framework(config: Path):
                 "cost": "成本"
             }
             
-            for metric_name, scores in avg_metrics.items():
-                display_name = metric_names.get(metric_name, metric_name)
-                print(f"  {display_name} ({metric_name}):")
-                for score_name, values in scores.items():
+            for benchmark_name, metrics in avg_metrics.items():
+                display_name = metric_names.get(benchmark_name, benchmark_name)
+                print(f"  {display_name} ({benchmark_name}):")
+                for metric_name, values in metrics.items():
                     avg_value = sum(values) / len(values) if values else 0
-                    print(f"    {score_name}: {avg_value:.3f}")
+                    print(f"    {metric_name}: {avg_value:.3f}")
         
         print("="*60)
         print(f"详细结果已保存到 eval_runs/ 目录")

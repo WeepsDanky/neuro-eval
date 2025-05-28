@@ -1,21 +1,150 @@
-![download](https://github.com/user-attachments/assets/5842e84e-004f-4afd-9373-af64e9575b78)
-<h3 align="center">🚀 One-stop solution for creating your digital avatar from chat history 💡</h3>  
-<h3 align="center">🚀从聊天记录创造数字分身的一站式解决方案💡</h3>  
+<!-- This project is forked from WeClone (https://github.com/xming521/WeClone) -->
+<!-- 本项目从 WeClone (https://github.com/xming521/WeClone) fork 而来 -->
+
+# WeClone 使用指南
+
+## 🚀 快速开始
+
+WeClone 提供了完整的命令行界面来处理从数据准备到模型部署的整个流程。所有命令都通过 `weclone-cli` 调用。
+
+### 基本语法
+```bash
+weclone-cli [COMMAND] [OPTIONS]
+```
+
+## 📝 可用命令列表
+
+### 1. `make-dataset` - 数据集生成
+**功能**: 处理聊天记录CSV文件，生成问答对数据集
+```bash
+weclone-cli make-dataset
+```
+- 读取 `./dataset/csv/` 目录下的聊天记录文件
+- 生成训练用的问答对数据集
+- 支持隐私信息过滤和数据清洗
+- 配置参数在 `settings.jsonc` 的 `make_dataset_args` 中设置
+
+### 2. `train-sft` - 模型微调
+**功能**: 使用准备好的数据集对模型进行监督微调
+```bash
+weclone-cli train-sft
+```
+- 基于LLaMA Factory进行LoRA微调
+- 支持单卡/多卡训练
+- 训练参数在 `settings.jsonc` 的 `train_sft_args` 中配置
+
+### 3. `webchat-demo` - Web界面测试
+**功能**: 启动 Web UI 与微调后的模型进行交互测试
+```bash
+weclone-cli webchat-demo
+```
+- 提供友好的Web界面进行对话测试
+- 可调整 temperature、top_p 等推理参数
+- 用于验证微调效果
+
+### 4. `server` - API服务
+**功能**: 启动API服务，提供模型推理接口
+```bash
+weclone-cli server
+```
+- 启动OpenAI兼容的API服务
+- 默认监听 `http://127.0.0.1:8005/v1`
+- 支持聊天机器人集成
+
+### 5. `test-model` - 模型测试
+**功能**: 使用常见聊天问题测试模型性能
+```bash
+weclone-cli test-model
+```
+- 使用预定义的测试问题集评估模型
+- 生成测试结果报告 `test_result-my.txt`
+- **注意**: 需要先启动 `server` 命令
+
+### 6. `eval-framework` - 综合评估框架
+**功能**: 运行多维度、多指标的全面模型评估
+```bash
+weclone-cli eval-framework --config <配置文件路径>
+```
+
+**参数说明**:
+- `--config, -c`: 评估配置文件路径（必需）
+  - 支持 YAML 和 JSON 格式
+  - 示例: `weclone/eval/config/simple_test.yaml`
+
+**评估指标**:
+- **互动流畅度**: 中断次数、超时重发、平均轮次间隔
+- **情感满意度**: 聊天后评分、情感分数
+- **任务成功率**: 检索精度、生成质量、函数调用准确性
+- **延迟性能**: 首token时间、完整响应时间、吞吐量
+- **成本分析**: token使用量、USD成本、成本效率
+
+**输出结果**:
+- 保存到 `eval_runs/<时间戳>/` 目录
+- 包含详细的CSV数据和运行元数据
+- 显示平均指标摘要
+
+### 7. `eval-model` - 验证集评估 
+**功能**: 使用从训练数据中划分出来的验证集进行评估
+```bash
+weclone-cli eval-model
+```
+- 用于模型训练过程中的性能监控
+- 基于验证集数据评估模型效果
+
+## 🔧 典型工作流程
+
+### 完整的数字分身创建流程:
+
+1. **准备数据**
+   ```bash
+   # 将聊天记录CSV文件放入 ./dataset/csv/ 目录
+   weclone-cli make-dataset
+   ```
+
+2. **训练模型**
+   ```bash
+   weclone-cli train-sft
+   ```
+
+3. **测试效果**
+   ```bash
+   # Web界面测试
+   weclone-cli webchat-demo
+   
+   # 或启动API服务进行测试
+   weclone-cli server
+   ```
+
+4. **性能评估**
+   ```bash
+   # 基础测试
+   weclone-cli test-model
+   
+   # 综合评估
+   weclone-cli eval-framework --config weclone/eval/config/simple_test.yaml
+   ```
+
+5. **部署应用**
+   ```bash
+   # 保持API服务运行，供聊天机器人调用
+   weclone-cli server
+   ```
+
+## ⚙️ 配置文件
+
+- **主配置**: `settings.jsonc` - 包含所有模块的配置参数
+- **评估配置**: `weclone/eval/config/*.yaml` - 评估框架专用配置
+
+## 💡 使用提示
+
+- 所有命令需要启动虚拟环境，然后在项目根目录执行
+- 确保 `settings.jsonc` 配置文件存在且配置正确
+- 评估框架需要先启动 API 服务
+- 使用 `--help` 查看命令详细帮助: `uv run python -m weclone.cli [COMMAND] --help`
+
+---
 
 
-<div align="center">
-
-[![GitHub stars](https://img.shields.io/github/stars/xming521/WeClone?style=for-the-badge&logo=github&label=Stars&logoColor=white&color=ffda65)](https://github.com/xming521/WeClone/stargazers)
-[![GitHub release](https://img.shields.io/github/v/release/xming521/WeClone?style=for-the-badge&logo=github&label=Release&logoColor=white&color=06d094)](https://github.com/xming521/WeClone/releases)
-<a href="https://qm.qq.com/cgi-bin/qm/qr?k=wNdgbOVT6oFOJ2wlMLsolUXErW9ESLpk&jump_from=webapi&authKey=z/reOp6YLyvR4Tl2k2nYMsLoMC3w9/99ucgKMX0oRGlxDV/WbYnvq2QxODoIkfxn" target="_blank" style="text-decoration: none;">
-  <img src="https://img.shields.io/badge/QQ群-708067078-12B7F5?style=for-the-badge&logo=qq&logoColor=white" alt="WeClone①" title="WeClone①">
-</a>
-[![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/+JEdak4m0XEQ3NGNl)
-
-<a href="https://hellogithub.com/repository/12ab209b56cb4cfd885c8cfd4cfdd53e" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=12ab209b56cb4cfd885c8cfd4cfdd53e&claim_uid=RThlPDoGrFvdMY5" alt="Featured｜HelloGitHub" style="width: 150px; height: 28px;" /></a>
-<a href="https://trendshift.io/repositories/13759" target="_blank"><img src="https://trendshift.io/api/badge/repositories/13759" alt="xming521%2FWeClone | Trendshift" style="width: 220px; height: 50px;" /></a>
-<a href="https://deepwiki.com/xming521/WeClone"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"  style="width: 134px; height: 23px;margin-bottom: 3px;"></a>
-</div>
 <p align="center">
   <a href="https://blog.051088.xyz/2025/05/14/WeClone-%E7%94%A8%E5%BE%AE%E4%BF%A1%E8%81%8A%E5%A4%A9%E8%AE%B0%E5%BD%95%E6%89%93%E9%80%A0%E8%87%AA%E5%B7%B1%E7%9A%84AI%E6%95%B0%E5%AD%97%E5%88%86%E8%BA%AB/" target="_blank">
     Windows部署指南

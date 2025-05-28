@@ -13,11 +13,10 @@ import asyncio
 import csv
 import json
 import time
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, Dict, List, Optional, Union
 import uuid
 
 try:
@@ -30,214 +29,8 @@ from tqdm import tqdm
 
 from weclone.utils.log import logger
 from weclone.utils.config import load_config
-
-
-@dataclass
-class ModelConfig:
-    """Model configuration"""
-    name: str
-    params: Dict[str, Any]
-    host: Optional[str] = None
-    api_key: Optional[str] = None
-
-
-@dataclass
-class PromptConfig:
-    """Prompt configuration"""
-    id: str
-    version: str
-    content: Optional[str] = None
-    file: Optional[str] = None
-
-
-@dataclass
-class TestCase:
-    """Individual test case"""
-    conv_id: str
-    turns: List[Dict[str, str]]  # [{"role": "user", "content": "..."}]
-
-
-@dataclass
-class JobContext:
-    """Context for metric computation"""
-    run_id: str
-    conv_id: str
-    model_config: ModelConfig
-    prompt_config: PromptConfig
-    test_case: TestCase
-    response_data: Dict[str, Any]
-    artifacts: Dict[str, Any]  # Additional data for metrics
-
-
-class MetricPlugin(Protocol):
-    """Protocol for metric plugins"""
-    name: str
-    
-    def required_artifacts(self) -> List[str]:
-        """Return list of required artifacts for this metric"""
-        ...
-    
-    def compute(self, job_ctx: JobContext) -> Dict[str, Any]:
-        """Compute metric scores from job context"""
-        ...
-
-
-class BaseMetric(ABC):
-    """Base class for metric implementations"""
-    
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        pass
-    
-    @abstractmethod
-    def required_artifacts(self) -> List[str]:
-        pass
-    
-    @abstractmethod
-    def compute(self, job_ctx: JobContext) -> Dict[str, Any]:
-        pass
-
-
-class InteractionFluencyMetric(BaseMetric):
-    """Measures conversation flow and interruptions"""
-    
-    @property
-    def name(self) -> str:
-        return "interaction_fluency"
-    
-    def required_artifacts(self) -> List[str]:
-        return ["response_times", "turn_intervals"]
-    
-    def compute(self, job_ctx: JobContext) -> Dict[str, Any]:
-        # Simulate interrupt detection and timeout handling
-        response_times = job_ctx.artifacts.get("response_times", [])
-        turn_intervals = job_ctx.artifacts.get("turn_intervals", [])
-        
-        interrupt_count = sum(1 for interval in turn_intervals if interval < 0.5)  # <0.5s = interrupt
-        timeout_resend_count = sum(1 for rt in response_times if rt > 30000)  # >30s = timeout
-        
-        return {
-            "interrupt_count": interrupt_count,
-            "timeout_resend_count": timeout_resend_count,
-            "avg_turn_interval": sum(turn_intervals) / len(turn_intervals) if turn_intervals else 0
-        }
-
-
-class SentimentSatisfactionMetric(BaseMetric):
-    """Measures user satisfaction through sentiment analysis"""
-    
-    @property
-    def name(self) -> str:
-        return "sentiment_satisfaction"
-    
-    def required_artifacts(self) -> List[str]:
-        return ["conversation_text"]
-    
-    def compute(self, job_ctx: JobContext) -> Dict[str, Any]:
-        # Simplified sentiment scoring - in practice, use actual sentiment analysis
-        conversation_text = job_ctx.artifacts.get("conversation_text", "")
-        
-        # Mock sentiment analysis
-        positive_words = ["好", "棒", "满意", "喜欢", "不错", "很好"]
-        negative_words = ["差", "糟糕", "不满", "讨厌", "不好", "失望"]
-        
-        pos_count = sum(word in conversation_text for word in positive_words)
-        neg_count = sum(word in conversation_text for word in negative_words)
-        
-        # Scale 1-5
-        if pos_count > neg_count:
-            rating = min(5, 3 + (pos_count - neg_count) * 0.5)
-        else:
-            rating = max(1, 3 - (neg_count - pos_count) * 0.5)
-        
-        return {
-            "post_chat_rating": round(rating, 2),
-            "sentiment_score": (pos_count - neg_count) / max(1, pos_count + neg_count)
-        }
-
-
-class TaskSuccessMetric(BaseMetric):
-    """Measures task completion accuracy"""
-    
-    @property
-    def name(self) -> str:
-        return "task_success"
-    
-    def required_artifacts(self) -> List[str]:
-        return ["expected_output", "actual_output"]
-    
-    def compute(self, job_ctx: JobContext) -> Dict[str, Any]:
-        expected = job_ctx.artifacts.get("expected_output", "")
-        actual = job_ctx.artifacts.get("actual_output", "")
-        
-        # Simple string matching - in practice, use BLEU/ROUGE
-        if not expected or not actual:
-            return {"retrieval_precision": 0.0, "gen_bleu": 0.0, "function_call_accuracy": 0.0}
-        
-        # Mock metrics
-        retrieval_precision = len(set(expected.split()) & set(actual.split())) / len(set(expected.split()))
-        gen_bleu = 0.8 if actual.lower() in expected.lower() or expected.lower() in actual.lower() else 0.3
-        function_call_accuracy = 1.0 if "函数" in actual and "函数" in expected else 0.0
-        
-        return {
-            "retrieval_precision": round(retrieval_precision, 3),
-            "gen_bleu": round(gen_bleu, 3),
-            "function_call_accuracy": round(function_call_accuracy, 3)
-        }
-
-
-class LatencyMetric(BaseMetric):
-    """Measures response timing"""
-    
-    @property
-    def name(self) -> str:
-        return "latency"
-    
-    def required_artifacts(self) -> List[str]:
-        return ["first_token_time", "full_response_time"]
-    
-    def compute(self, job_ctx: JobContext) -> Dict[str, Any]:
-        first_token_ms = job_ctx.artifacts.get("first_token_time", 0)
-        full_response_ms = job_ctx.artifacts.get("full_response_time", 0)
-        
-        return {
-            "first_token_ms": first_token_ms,
-            "full_response_ms": full_response_ms
-        }
-
-
-class CostMetric(BaseMetric):
-    """Measures API usage costs"""
-    
-    @property
-    def name(self) -> str:
-        return "cost"
-    
-    def required_artifacts(self) -> List[str]:
-        return ["token_usage"]
-    
-    def compute(self, job_ctx: JobContext) -> Dict[str, Any]:
-        token_usage = job_ctx.artifacts.get("token_usage", {})
-        prompt_tokens = token_usage.get("prompt_tokens", 0)
-        completion_tokens = token_usage.get("completion_tokens", 0)
-        
-        # Mock pricing (USD per 1K tokens)
-        model_name = job_ctx.model_config.name
-        if "gpt-4" in model_name.lower():
-            prompt_price, completion_price = 0.03, 0.06
-        elif "gpt-3.5" in model_name.lower():
-            prompt_price, completion_price = 0.001, 0.002
-        else:
-            prompt_price, completion_price = 0.001, 0.001
-        
-        usd_cost = (prompt_tokens * prompt_price + completion_tokens * completion_price) / 1000
-        
-        return {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "usd_cost": round(usd_cost, 6)
-        }
+from .types import ModelConfig, PromptConfig, TestCase, JobContext
+from .benchmark import AVAILABLE_BENCHMARKS, BaseBenchmark, BenchmarkResult
 
 
 class EvaluationFramework:
@@ -246,7 +39,7 @@ class EvaluationFramework:
     def __init__(self, config_path: str):
         self.config_path = Path(config_path)
         self.config = self._load_config()
-        self.metrics = self._initialize_metrics()
+        self.benchmarks = self._initialize_benchmarks()
         self.run_id = self._generate_run_id()
         self.output_dir = Path("eval_runs") / self.run_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -264,18 +57,28 @@ class EvaluationFramework:
             else:
                 return json.load(f)
     
-    def _initialize_metrics(self) -> Dict[str, BaseMetric]:
-        """Initialize metric plugins"""
-        available_metrics = {
-            "interaction_fluency": InteractionFluencyMetric(),
-            "sentiment_satisfaction": SentimentSatisfactionMetric(),
-            "task_success": TaskSuccessMetric(),
-            "latency": LatencyMetric(),
-            "cost": CostMetric()
-        }
+    def _initialize_benchmarks(self) -> Dict[str, BaseBenchmark]:
+        """Initialize benchmark plugins"""
+        benchmarks = {}
+        enabled_benchmarks = self.config.get("metrics", [])
         
-        enabled_metrics = self.config.get("metrics", [])
-        return {name: metric for name, metric in available_metrics.items() if name in enabled_metrics}
+        for benchmark_name in enabled_benchmarks:
+            if benchmark_name not in AVAILABLE_BENCHMARKS:
+                logger.warning(f"Unknown benchmark: {benchmark_name}")
+                continue
+            
+            # Get benchmark configuration
+            benchmark_config = self.config.get("benchmark_configs", {}).get(benchmark_name, {})
+            
+            # Initialize benchmark
+            benchmark_class = AVAILABLE_BENCHMARKS[benchmark_name]
+            benchmark = benchmark_class(config=benchmark_config)
+            benchmarks[benchmark_name] = benchmark
+            
+            logger.debug(f"Initialized benchmark: {benchmark_name}")
+        
+        logger.info(f"Loaded {len(benchmarks)} benchmarks: {list(benchmarks.keys())}")
+        return benchmarks
     
     def _generate_run_id(self) -> str:
         """Generate unique run ID"""
@@ -430,7 +233,11 @@ class EvaluationFramework:
             "run_id": self.run_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "config": self.config,
-            "enabled_metrics": list(self.metrics.keys())
+            "enabled_benchmarks": list(self.benchmarks.keys()),
+            "benchmark_descriptions": {
+                name: benchmark.get_description() 
+                for name, benchmark in self.benchmarks.items()
+            }
         }
         
         with open(self.output_dir / "run_meta.json", 'w', encoding='utf-8') as f:
@@ -460,22 +267,23 @@ class EvaluationFramework:
             logger.info(f"  - Assistant responses: {assistant_responses}")
             logger.info(f"  - Empty assistant responses: {total_turns - user_inputs - assistant_responses}")
     
-    def _save_metrics_csv(self, results: List[Dict[str, Any]]):
-        """Save metrics results in CSV format"""
-        with open(self.output_dir / "metrics.csv", 'w', newline='', encoding='utf-8') as f:
+    def _save_benchmark_results_csv(self, results: List[Dict[str, Any]]):
+        """Save benchmark results in CSV format"""
+        with open(self.output_dir / "benchmark_results.csv", 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(["run_id", "conv_id", "model", "prompt", "metric", "value"])
+            writer.writerow(["run_id", "conv_id", "model", "prompt", "benchmark", "metric", "value"])
             
             for result in results:
-                for metric_name, scores in result["metrics"].items():
-                    for score_name, score_value in scores.items():
+                for benchmark_name, benchmark_result in result["benchmark_results"].items():
+                    for metric_name, metric_value in benchmark_result.metrics.items():
                         writer.writerow([
                             self.run_id,
                             result["conv_id"],
                             result["model"],
                             result["prompt"],
-                            f"{metric_name}.{score_name}",
-                            score_value
+                            benchmark_name,
+                            metric_name,
+                            metric_value
                         ])
     
     def _save_latency_cost_csv(self, results: List[Dict[str, Any]]):
@@ -485,17 +293,22 @@ class EvaluationFramework:
             writer.writerow(["run_id", "conv_id", "model", "n_tokens_prompt", "n_tokens_completion", "latency_ms", "cost_usd"])
             
             for result in results:
-                latency_data = result["metrics"].get("latency", {})
-                cost_data = result["metrics"].get("cost", {})
+                latency_result = result["benchmark_results"].get("latency")
+                cost_result = result["benchmark_results"].get("cost")
+                
+                latency_ms = latency_result.metrics.get("full_response_ms", 0) if latency_result else 0
+                prompt_tokens = cost_result.metrics.get("prompt_tokens", 0) if cost_result else 0
+                completion_tokens = cost_result.metrics.get("completion_tokens", 0) if cost_result else 0
+                cost_usd = cost_result.metrics.get("usd_cost", 0) if cost_result else 0
                 
                 writer.writerow([
                     self.run_id,
                     result["conv_id"],
                     result["model"],
-                    cost_data.get("prompt_tokens", 0),
-                    cost_data.get("completion_tokens", 0),
-                    latency_data.get("full_response_ms", 0),
-                    cost_data.get("usd_cost", 0)
+                    prompt_tokens,
+                    completion_tokens,
+                    latency_ms,
+                    cost_usd
                 ])
     
     async def run_evaluation(self):
@@ -535,22 +348,25 @@ class EvaluationFramework:
                             # Create job context
                             job_ctx = self._create_job_context(model_config, prompt_config, updated_test_case, response_data)
                             
-                            # Compute metrics
-                            metrics_results = {}
-                            for metric_name, metric in self.metrics.items():
+                            # Compute benchmark results
+                            benchmark_results = {}
+                            for benchmark_name, benchmark in self.benchmarks.items():
                                 try:
-                                    scores = metric.compute(job_ctx)
-                                    metrics_results[metric_name] = scores
-                                    logger.debug(f"Computed {metric_name} for case {test_case.conv_id}: {scores}")
+                                    result = benchmark.compute(job_ctx)
+                                    benchmark_results[benchmark_name] = result
+                                    logger.debug(f"Computed {benchmark_name} for case {test_case.conv_id}: {result.metrics}")
                                 except Exception as e:
-                                    logger.error(f"Error computing {metric_name}: {e}")
-                                    metrics_results[metric_name] = {}
+                                    logger.error(f"Error computing {benchmark_name}: {e}")
+                                    benchmark_results[benchmark_name] = BenchmarkResult(
+                                        benchmark_name=benchmark_name,
+                                        metrics={}
+                                    )
                             
                             results.append({
                                 "conv_id": test_case.conv_id,
                                 "model": model_config.name,
                                 "prompt": prompt_config.id,
-                                "metrics": metrics_results,
+                                "benchmark_results": benchmark_results,
                                 "response_data": response_data
                             })
                             
@@ -566,8 +382,8 @@ class EvaluationFramework:
         self._save_dataset_csv(completed_test_cases)
         
         # Save results
-        logger.info("Saving evaluation metrics and costs")
-        self._save_metrics_csv(results)
+        logger.info("Saving benchmark results and costs")
+        self._save_benchmark_results_csv(results)
         self._save_latency_cost_csv(results)
         
         logger.info(f"Evaluation complete. Results saved to: {self.output_dir}")
