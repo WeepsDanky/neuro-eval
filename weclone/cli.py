@@ -109,6 +109,76 @@ def test_model():
     test_main()
 
 
+@cli.command("eval-framework", help="运行综合评估框架，支持多指标、多模型、多提示词的全面评估。")
+@click.option(
+    '--config', '-c',
+    type=click.Path(exists=True, path_type=Path),
+    required=True,
+    help='评估配置文件路径 (YAML或JSON格式)'
+)
+@apply_common_decorators()
+def eval_framework(config: Path):
+    """运行综合评估框架"""
+    import asyncio
+    from weclone.eval.framework import run_evaluation_from_config
+    
+    logger.info(f"使用配置文件启动综合评估: {config}")
+    
+    try:
+        # Run the evaluation
+        results = asyncio.run(run_evaluation_from_config(str(config)))
+        
+        logger.info(f"评估完成，共处理 {len(results)} 个测试用例")
+        
+        # Print summary
+        print("\n" + "="*60)
+        print("评估结果摘要")
+        print("="*60)
+        
+        models = set(r["model"] for r in results)
+        prompts = set(r["prompt"] for r in results)
+        
+        print(f"测试模型: {', '.join(models)}")
+        print(f"测试提示词: {', '.join(prompts)}")
+        print(f"总测试用例: {len(results)}")
+        
+        # Calculate average metrics
+        if results:
+            avg_metrics = {}
+            for result in results:
+                for metric_name, scores in result["metrics"].items():
+                    if metric_name not in avg_metrics:
+                        avg_metrics[metric_name] = {}
+                    for score_name, score_value in scores.items():
+                        if isinstance(score_value, (int, float)):
+                            if score_name not in avg_metrics[metric_name]:
+                                avg_metrics[metric_name][score_name] = []
+                            avg_metrics[metric_name][score_name].append(score_value)
+            
+            print("\n平均指标:")
+            metric_names = {
+                "interaction_fluency": "互动流畅度",
+                "sentiment_satisfaction": "情感满意度", 
+                "task_success": "任务成功率",
+                "latency": "延迟",
+                "cost": "成本"
+            }
+            
+            for metric_name, scores in avg_metrics.items():
+                display_name = metric_names.get(metric_name, metric_name)
+                print(f"  {display_name} ({metric_name}):")
+                for score_name, values in scores.items():
+                    avg_value = sum(values) / len(values) if values else 0
+                    print(f"    {score_name}: {avg_value:.3f}")
+        
+        print("="*60)
+        print(f"详细结果已保存到 eval_runs/ 目录")
+        
+    except Exception as e:
+        logger.error(f"评估失败: {e}")
+        raise click.ClickException(f"评估失败: {e}")
+
+
 @cli.command("server", help="启动API服务，提供模型推理接口。")
 @apply_common_decorators()
 def server():

@@ -1,0 +1,61 @@
+batch_name: "weclone_comprehensive_eval"
+
+# Prompt configurations
+prompts:
+  - id: "default_system"
+    version: "v1.0"
+    content: "你是一个友善、有用的AI助手。请用中文回答用户的问题，保持自然和礼貌的对话风格。"
+  
+  - id: "casual_friend"
+    version: "v1.1"
+    content: "你是用户的好朋友，用轻松、亲切的语气和用户聊天。可以使用一些口语化的表达，让对话更自然。"
+
+# Model configurations
+models:
+  - name: "weclone:local"
+    params:
+      model: "gpt-3.5-turbo"
+      temperature: 0.7
+      max_tokens: 150
+    host: "http://127.0.0.1:8005/v1"
+    api_key: "sk-test"
+  
+  - name: "openai:gpt-3.5-turbo"
+    params:
+      model: "gpt-3.5-turbo"
+      temperature: 0.7
+      max_tokens: 150
+    host: "https://api.openai.com/v1"
+    api_key: "${OPENAI_API_KEY}"  # Use environment variable
+  
+  - name: "weclone:high-temp"
+    params:
+      model: "gpt-3.5-turbo"
+      temperature: 1.0
+      max_tokens: 150
+    host: "http://127.0.0.1:8005/v1"
+    api_key: "sk-test"
+
+# Test cases
+cases:
+  - file: "dataset/test_data.json"  # Existing test data format
+  - file: "weclone/eval/config/additional_cases.jsonl"  # Additional JSONL format
+
+# Metrics to evaluate
+metrics:
+  - interaction_fluency
+  - sentiment_satisfaction
+  - task_success
+  - latency
+  - cost
+
+# Execution settings
+parallel: 2  # Number of parallel workers
+max_usd: 5.0  # Maximum cost limit
+timeout_seconds: 30  # Per-request timeout
+
+# Output settings
+output_formats:
+  - csv
+  - json
+  - summary_report 

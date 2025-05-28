@@ -53,17 +53,48 @@ def handler_text(content: str, history: list, config):
 def main():
     test_list = json.loads(open("dataset/test_data.json", "r", encoding="utf-8").read())["questions"]
     res = []
+    
     for questions in tqdm(test_list, desc=" Testing..."):
         history = []
+        
+        # Add all user questions to history first (for recording purposes)
         for q in questions:
-            handler_text(q, history=history, config=config)
+            history.append({"role": "user", "content": q})
+        
+        # Get one response for all the questions
+        if questions:  # Make sure there are questions
+            # Merge all user questions into one message for API call
+            merged_question = "\n".join(questions)
+            
+            # Create messages for API call (strict u/a alternating format)
+            messages = [
+                {"role": "system", "content": f"{config.default_prompt}"},
+                {"role": "user", "content": merged_question}
+            ]
+            
+            try:
+                # Call API with merged question
+                typed_messages = cast(List[ChatCompletionMessageParam], messages)
+                response = client.chat.completions.create(
+                    model=config.model,
+                    messages=typed_messages,
+                    max_tokens=50
+                )
+                
+                resp = str(response.choices[0].message.content)
+                resp = resp.replace("\n ", "")
+                history.append({"role": "assistant", "content": resp})
+                
+            except openai.APIError as e:
+                history.append({"role": "assistant", "content": f"AI接口出错,请重试\n{str(e)}"})
+        
         res.append(history)
 
-    res_file = open("test_result-my.txt", "w")
-    for r in res:
-        for i in r:
-            res_file.write(i["content"] + "\n")
-        res_file.write("\n")
+    with open("test_result-my.txt", "w", encoding="utf-8") as res_file:
+        for r in res:
+            for i in r:
+                res_file.write(f"{i['role']}: {i['content']}\n")
+            res_file.write("\n")
 
 
 if __name__ == "__main__":
