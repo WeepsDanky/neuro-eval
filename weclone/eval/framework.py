@@ -210,6 +210,7 @@ class EvaluationFramework:
             "response_times": response_data.get("timings", []),
             "turn_intervals": [1.0] * len(response_data.get("timings", [])),  # Mock intervals
             "conversation_text": " ".join(response_data.get("responses", [])),
+            "conversation_json": test_case.turns,  # Add conversation_json artifact for ChatHumanScore
             "expected_output": "预期输出",  # Mock expected output
             "actual_output": " ".join(response_data.get("responses", [])),
             "first_token_time": response_data.get("timings", [0])[0] if response_data.get("timings") else 0,

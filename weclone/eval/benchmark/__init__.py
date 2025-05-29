@@ -11,6 +11,7 @@ from .sentiment_satisfaction import SentimentSatisfactionBenchmark
 from .task_success import TaskSuccessBenchmark
 from .latency import LatencyBenchmark
 from .cost import CostBenchmark
+from .chathumanscore import ChatHumanScore
 
 __all__ = [
     'BaseBenchmark',
@@ -19,7 +20,8 @@ __all__ = [
     'SentimentSatisfactionBenchmark', 
     'TaskSuccessBenchmark',
     'LatencyBenchmark',
-    'CostBenchmark'
+    'CostBenchmark',
+    'ChatHumanScore'
 ]
 
 # Registry for easy benchmark discovery
@@ -28,5 +30,6 @@ AVAILABLE_BENCHMARKS = {
     'sentiment_satisfaction': SentimentSatisfactionBenchmark,
     'task_success': TaskSuccessBenchmark,
     'latency': LatencyBenchmark,
-    'cost': CostBenchmark
+    'cost': CostBenchmark,
+    'chathumanscore': ChatHumanScore
 } 
