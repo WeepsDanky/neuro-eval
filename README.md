@@ -33,7 +33,19 @@ weclone-cli train-sft
 - 支持单卡/多卡训练
 - 训练参数在 `settings.jsonc` 的 `train_sft_args` 中配置
 
-### 3. `webchat-demo` - Web界面测试
+### 3. `export-to-gguf` - 模型导出
+**功能**: 将LoRA微调模型导出为GGUF格式，用于Ollama部署
+```bash
+weclone-cli export-to-gguf
+```
+- 自动合并LoRA adapter和基础模型
+- 转换为GGUF格式并支持量化
+- 生成Windows Ollama部署包
+- 包含Modelfile和部署脚本
+- **依赖**: 需要安装 llama.cpp 工具
+- **详细指南**: 请参考 [GGUF导出指南](docs/GGUF_EXPORT_GUIDE.md)
+
+### 4. `webchat-demo` - Web界面测试
 **功能**: 启动 Web UI 与微调后的模型进行交互测试
 ```bash
 weclone-cli webchat-demo
@@ -42,7 +54,7 @@ weclone-cli webchat-demo
 - 可调整 temperature、top_p 等推理参数
 - 用于验证微调效果
 
-### 4. `server` - API服务
+### 5. `server` - API服务
 **功能**: 启动API服务，提供模型推理接口
 ```bash
 weclone-cli server
@@ -51,7 +63,7 @@ weclone-cli server
 - 默认监听 `http://127.0.0.1:8005/v1`
 - 支持聊天机器人集成
 
-### 5. `test-model` - 模型测试
+### 6. `test-model` - 模型测试
 **功能**: 使用常见聊天问题测试模型性能
 ```bash
 weclone-cli test-model
@@ -60,7 +72,7 @@ weclone-cli test-model
 - 生成测试结果报告 `test_result-my.txt`
 - **注意**: 需要先启动 `server` 命令
 
-### 6. `eval-framework` - 综合评估框架
+### 7. `eval-framework` - 综合评估框架
 **功能**: 运行多维度、多指标的全面模型评估
 ```bash
 weclone-cli eval-framework --config <配置文件路径>
@@ -83,7 +95,7 @@ weclone-cli eval-framework --config <配置文件路径>
 - 包含详细的CSV数据和运行元数据
 - 显示平均指标摘要
 
-### 7. `eval-model` - 验证集评估 
+### 8. `eval-model` - 验证集评估 
 **功能**: 使用从训练数据中划分出来的验证集进行评估
 ```bash
 weclone-cli eval-model
@@ -124,7 +136,29 @@ weclone-cli eval-model
    weclone-cli eval-framework --config weclone/eval/config/simple_test.yaml
    ```
 
-5. **部署应用**
+5. **导出到Ollama (可选)**
+   ```bash
+   # 方法1: 使用便捷安装脚本 (推荐) - 下载预编译版本
+   ./scripts/install_llama_cpp.sh
+   
+   # 方法2: 手动下载预编译版本
+   # 访问 https://github.com/ggerganov/llama.cpp/releases
+   # 下载适合您系统的预编译版本，解压并添加到 PATH
+   
+   # 方法3: 从源码编译（仅在预编译版本不可用时使用）
+   git clone https://github.com/ggerganov/llama.cpp.git
+   cd llama.cpp && make
+   sudo ln -s $(pwd)/convert-hf-to-gguf.py /usr/local/bin/
+   sudo ln -s $(pwd)/quantize /usr/local/bin/
+   
+   # 导出模型为GGUF格式
+   weclone-cli export-to-gguf
+   
+   # 将 ollama_export 文件夹复制到Windows系统
+   # 在Windows上双击运行 deploy_to_ollama.bat
+   ```
+
+6. **部署应用**
    ```bash
    # 保持API服务运行，供聊天机器人调用
    weclone-cli server

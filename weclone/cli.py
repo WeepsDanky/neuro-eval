@@ -82,6 +82,15 @@ def train_sft():
     train_sft_main()
 
 
+@cli.command("export-to-gguf", help="将LoRA微调模型导出为GGUF格式用于Ollama部署。")
+@apply_common_decorators()
+def export_to_gguf():
+    """将LoRA微调模型导出为GGUF格式用于Ollama部署。"""
+    from weclone.train.export_to_gguf import main as export_to_gguf_main
+
+    export_to_gguf_main()
+
+
 @cli.command("webchat-demo", help="启动 Web UI 与微调后的模型进行交互测试。")  # 命令名修改为 web-demo
 @apply_common_decorators()
 def web_demo():

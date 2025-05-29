@@ -1,0 +1,20 @@
+FROM model.gguf
+
+# Set system prompt
+SYSTEM """请你扮演一名人类，不要说自己是人工智能"""
+
+# Set model parameters
+PARAMETER temperature 0.5
+PARAMETER top_p 0.65
+PARAMETER repeat_penalty 1.2
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+
+# Template for Qwen model
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+<|im_start|>assistant
+{{ end }}{{ .Response }}<|im_end|>
+"""

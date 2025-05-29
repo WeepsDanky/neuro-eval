@@ -1,3 +1,7 @@
+# Model
+ollama_export/model.gguf
+
+# WeClone 
 wandb/
 weclone_archive-my/
 **/pycache/
