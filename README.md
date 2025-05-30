@@ -103,6 +103,536 @@ weclone-cli eval-model
 - 用于模型训练过程中的性能监控
 - 基于验证集数据评估模型效果
 
+## 🔬 评估框架架构
+
+WeClone 提供了功能强大的模块化评估框架，支持对任何 OpenAI 兼容的模型进行全面的多维度评估。
+
+### 框架特性
+
+- **🔧 模块化基准系统**: 每个基准都是独立的可配置模块
+- **📊 多指标评估**: 交互流畅度、情感满意度、任务成功率、延迟性能、成本分析
+- **⚙️ 灵活配置**: 支持 YAML/JSON 配置文件
+- **💾 数据持久化**: 结构化 CSV 输出，时间戳标记的运行记录
+- **🌐 多模型支持**: 同时测试多个模型和提示变体
+- **🐛 调试模式**: 限制测试案例数量，快速迭代开发
+
+### 支持的模型类型
+
+评估框架支持任何 OpenAI 兼容的 API，包括：
+
+- **本地模型**: WeClone 微调后的模型 (`http://127.0.0.1:8005/v1`)
+- **OpenAI 模型**: GPT-3.5, GPT-4 等 (`https://api.openai.com/v1`)
+- **第三方 API**: OpenRouter、Anthropic 代理等
+  - DeepSeek: `https://openrouter.ai/api/v1`
+  - 通义千问: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+  - 智谱 GLM: `https://open.bigmodel.cn/api/paas/v4`
+- **自部署模型**: vLLM、FastChat、Ollama 等兼容服务
+
+### 评估基准详情
+
+#### 1. 交互流畅度 (`interaction_fluency`)
+- **中断计数**: 对话中的中断次数
+- **超时重发**: 响应超时导致的重发次数  
+- **平均轮次间隔**: 用户-助手轮次之间的平均时间间隔
+
+#### 2. 情感满意度 (`sentiment_satisfaction`)
+- **聊天后评分**: 1-5 分的主观满意度评分
+- **情感分数**: -1 到 1 的情感极性分析
+
+#### 3. 任务成功率 (`task_success`)
+- **检索精度**: 信息检索的准确性
+- **生成质量**: BLEU 分数等生成质量指标
+- **函数调用准确性**: 工具使用的正确率
+
+#### 4. 延迟性能 (`latency`)
+- **首 Token 时间**: 首个 Token 生成延迟
+- **完整响应时间**: 完成整个响应的时间
+- **吞吐量**: 每秒 Token 生成数量
+
+#### 5. 成本分析 (`cost`)
+- **Token 使用量**: 输入和输出 Token 统计
+- **USD 成本**: 基于模型定价的成本计算
+- **成本效率**: 每 Token 成本分析
+
+### 配置示例
+
+#### 基础配置
+```yaml
+batch_name: "model_comparison_test"
+
+# 提示配置
+prompts:
+  - id: "default_system"
+    version: "v1.0" 
+    content: "你是一个友善、有用的AI助手。"
+
+# 模型配置 - 支持多种 API
+models:
+  # 本地微调模型
+  - name: "weclone:local"
+    params:
+      model: "gpt-3.5-turbo"
+      temperature: 0.7
+      max_tokens: 150
+    host: "http://127.0.0.1:8005/v1"
+    api_key: "sk-test"
+    
+  # OpenRouter DeepSeek
+  - name: "deepseek:chat-v3"
+    params:
+      model: "deepseek/deepseek-chat-v3-0324"
+      temperature: 0.7
+      max_tokens: 150
+    host: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"
+    
+  # OpenAI 官方
+  - name: "openai:gpt-4"
+    params:
+      model: "gpt-4"
+      temperature: 0.7
+      max_tokens: 150
+    host: "https://api.openai.com/v1"
+    api_key: "${OPENAI_API_KEY}"
+
+# 测试数据
+cases:
+  - file: "dataset/test_data.json"
+
+# 启用的评估指标
+metrics:
+  - interaction_fluency
+  - sentiment_satisfaction  
+  - task_success
+  - latency
+  - cost
+
+# 执行设置
+parallel: 2
+max_usd: 10.0
+timeout_seconds: 60
+```
+
+#### 高级基准配置
+```yaml
+# 基准模块自定义配置
+benchmark_configs:
+  interaction_fluency:
+    interrupt_threshold_ms: 300
+    timeout_threshold_ms: 25000
+    
+  sentiment_satisfaction:
+    positive_words: ["好", "棒", "满意", "喜欢"]
+    negative_words: ["差", "糟糕", "不满", "讨厌"] 
+    base_rating: 3.5
+    rating_sensitivity: 0.8
+    
+  cost:
+    model_pricing:
+      "gpt-4":
+        prompt: 0.03
+        completion: 0.06
+      "deepseek/deepseek-chat-v3-0324":
+        prompt: 0.0014
+        completion: 0.0028
+    excellent_cost_per_token: 0.000005
+```
+
+### 使用方式
+
+#### 命令行评估
+```bash
+# 运行评估
+weclone-cli eval-framework --config weclone/eval/config/deepseek_openrouter_test.yaml
+
+# 调试模式（限制测试案例）
+weclone-cli eval-framework --config weclone/eval/config/debug_test.yaml
+```
+
+#### 环境变量配置
+```bash
+# 设置 API 密钥
+export OPENROUTER_API_KEY="your_openrouter_key"
+export OPENAI_API_KEY="your_openai_key"
+export DASHSCOPE_API_KEY="your_qwen_key"
+```
+
+## 📋 配置格式详细说明
+
+### 配置文件结构
+
+评估配置文件支持 **YAML** 和 **JSON** 格式，主要包含以下部分：
+
+```yaml
+# 基本信息
+batch_name: "string"           # 评估批次名称 (必填)
+
+# 核心配置部分
+prompts: []                    # 提示词配置列表 (必填)
+models: []                     # 模型配置列表 (必填)  
+cases: []                      # 测试数据配置列表 (必填)
+metrics: []                    # 评估指标列表 (必填)
+
+# 可选配置部分
+benchmark_configs: {}          # 基准模块自定义配置 (可选)
+debug: {}                      # 调试模式配置 (可选)
+parallel: int                  # 并发数 (可选, 默认: 1)
+max_usd: float                 # 最大成本限制 (可选, 默认: 无限制)
+timeout_seconds: int           # 请求超时时间 (可选, 默认: 30)
+output_formats: []             # 输出格式列表 (可选)
+```
+
+### 核心配置参数
+
+#### 1. `prompts` - 提示词配置
+定义系统提示词和对话设置：
+
+```yaml
+prompts:
+  - id: "string"              # 提示词唯一标识符 (必填)
+    version: "string"         # 版本号 (必填)
+    content: "string"         # 提示词内容 (content 和 file 二选一)
+    file: "path/to/file"      # 提示词文件路径 (content 和 file 二选一)
+```
+
+**示例**：
+```yaml
+prompts:
+  - id: "default_system"
+    version: "v1.0"
+    content: "你是一个友善、有用的AI助手。"
+  
+  - id: "casual_chat"
+    version: "v1.1" 
+    file: "prompts/casual_system.txt"
+```
+
+#### 2. `models` - 模型配置
+定义要评估的模型和参数：
+
+```yaml
+models:
+  - name: "string"            # 模型名称标识 (必填)
+    host: "string"            # API 基础 URL (可选, 默认: http://127.0.0.1:8005/v1)
+    api_key: "string"         # API 密钥 (可选, 支持环境变量 ${VAR_NAME})
+    params:                   # 模型参数 (必填)
+      model: "string"         # 模型标识符 (必填)
+      temperature: float      # 采样温度 (可选, 0.0-2.0)
+      max_tokens: int         # 最大生成token数 (可选)
+      top_p: float           # 核采样参数 (可选, 0.0-1.0)
+      top_k: int             # Top-K采样 (可选)
+      frequency_penalty: float # 频率惩罚 (可选, -2.0-2.0)
+      presence_penalty: float  # 存在惩罚 (可选, -2.0-2.0)
+      stop: [string]          # 停止词列表 (可选)
+```
+
+**支持的 API 类型**：
+- **本地 WeClone**: `http://127.0.0.1:8005/v1`
+- **OpenAI**: `https://api.openai.com/v1`
+- **OpenRouter**: `https://openrouter.ai/api/v1`
+- **阿里通义**: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- **智谱 GLM**: `https://open.bigmodel.cn/api/paas/v4`
+
+**示例**：
+```yaml
+models:
+  # 本地微调模型
+  - name: "weclone-local"
+    host: "http://127.0.0.1:8005/v1"
+    api_key: "sk-test"
+    params:
+      model: "gpt-3.5-turbo"
+      temperature: 0.7
+      max_tokens: 512
+      top_p: 0.9
+  
+  # OpenRouter 第三方模型
+  - name: "deepseek-v3"
+    host: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"
+    params:
+      model: "deepseek/deepseek-chat-v3-0324"
+      temperature: 0.5
+      max_tokens: 1024
+```
+
+#### 3. `cases` - 测试数据配置
+定义测试数据来源：
+
+```yaml
+cases:
+  - file: "path/to/data.json"   # JSON 格式数据文件
+  - file: "path/to/data.jsonl"  # JSONL 格式数据文件
+```
+
+**支持的数据格式**：
+
+**JSON 格式** (兼容现有 test_data.json):
+```json
+{
+  "questions": [
+    ["问题1", "问题2"],
+    ["另一组问题"]
+  ]
+}
+```
+
+**JSONL 格式** (每行一个对话):
+```jsonl
+{"conversation": [{"role": "user", "content": "你好"}, {"role": "assistant", "content": ""}]}
+{"conversation": [{"role": "user", "content": "今天天气怎么样？"}, {"role": "assistant", "content": ""}]}
+```
+
+#### 4. `metrics` - 评估指标
+指定要使用的评估基准：
+
+```yaml
+metrics:
+  - "interaction_fluency"     # 交互流畅度
+  - "sentiment_satisfaction"  # 情感满意度
+  - "task_success"           # 任务成功率
+  - "latency"                # 延迟性能
+  - "cost"                   # 成本分析
+  - "chathumanscore"         # 人类化评分 (需额外依赖)
+```
+
+### 高级配置参数
+
+#### 5. `benchmark_configs` - 基准自定义配置
+为每个基准提供专门的配置：
+
+```yaml
+benchmark_configs:
+  # 交互流畅度配置
+  interaction_fluency:
+    interrupt_threshold_ms: 300        # 中断阈值 (毫秒)
+    timeout_threshold_ms: 25000       # 超时阈值 (毫秒)
+  
+  # 情感满意度配置  
+  sentiment_satisfaction:
+    positive_words: ["好", "棒", "满意"]  # 积极词汇
+    negative_words: ["差", "糟糕", "不满"] # 消极词汇
+    base_rating: 3.5                    # 基础评分
+    rating_sensitivity: 0.8             # 评分敏感度
+  
+  # 任务成功率配置
+  task_success:
+    bleu_weight: 0.4                   # BLEU 权重
+    precision_weight: 0.3              # 精确率权重
+    recall_weight: 0.3                 # 召回率权重
+  
+  # 延迟性能配置
+  latency:
+    first_token_excellent_ms: 500      # 优秀首token时间
+    first_token_good_ms: 1000         # 良好首token时间
+    full_response_excellent_ms: 2000   # 优秀完整响应时间
+    full_response_good_ms: 5000       # 良好完整响应时间
+  
+  # 成本分析配置
+  cost:
+    model_pricing:                     # 自定义模型定价
+      "gpt-4":
+        prompt: 0.03                   # 输入token价格 (USD/1K)
+        completion: 0.06               # 输出token价格 (USD/1K)
+      "deepseek/deepseek-chat-v3-0324":
+        prompt: 0.0014
+        completion: 0.0028
+    excellent_cost_per_token: 0.000005 # 优秀成本阈值
+    good_cost_per_token: 0.00005      # 良好成本阈值
+    
+  # ChatHumanScore 配置 (需安装额外依赖)
+  chathumanscore:
+    enable_grammar_check: true         # 启用语法检查
+    enable_semantic_analysis: true     # 启用语义分析
+    enable_gpt_judge: false           # 启用GPT评判
+    max_grammar_error_rate: 0.05      # 最大语法错误率
+    max_repeat_ratio: 0.30            # 最大重复率
+    human_review_threshold: 5.0       # 人工审核阈值
+    score_weights:                    # 评分权重
+      naturalness: 0.25              # 自然度
+      affective_alignment: 0.20       # 情感对齐
+      diversity: 0.15                # 多样性
+      context_cohesion: 0.20         # 上下文粘性
+      human_signal: 0.20             # 人类信号
+```
+
+#### 6. `debug` - 调试模式配置
+快速迭代开发的调试选项：
+
+```yaml
+debug:
+  max_cases: 3                      # 限制测试案例数量
+  verbose: true                     # 详细日志输出
+  save_intermediate: true           # 保存中间结果
+```
+
+#### 7. 执行控制参数
+
+```yaml
+# 并发控制
+parallel: 2                         # 并发workers数量 (默认: 1)
+
+# 成本控制
+max_usd: 10.0                      # 最大成本限制 USD (默认: 无限制)
+
+# 超时控制
+timeout_seconds: 60                # 单个请求超时时间 (默认: 30秒)
+
+# 输出控制
+output_formats:                    # 输出格式 (默认: ["csv"])
+  - "csv"                         # CSV 格式
+  - "json"                        # JSON 格式
+  - "summary_report"              # 摘要报告
+```
+
+### 环境变量支持
+
+配置文件支持环境变量替换，使用 `${VAR_NAME}` 语法：
+
+```yaml
+models:
+  - name: "openai-gpt4"
+    api_key: "${OPENAI_API_KEY}"     # 从环境变量读取
+    host: "${OPENAI_BASE_URL}"       # 可选的自定义端点
+```
+
+**常用环境变量**：
+```bash
+# 设置环境变量
+export OPENAI_API_KEY="your_openai_key"
+export OPENROUTER_API_KEY="your_openrouter_key"  
+export DASHSCOPE_API_KEY="your_qwen_key"
+export GLM_API_KEY="your_glm_key"
+```
+
+### 完整配置示例
+
+```yaml
+batch_name: "comprehensive_model_evaluation"
+
+prompts:
+  - id: "system_default"
+    version: "v1.0"
+    content: "你是一个友善、专业的AI助手。"
+  
+  - id: "casual_chat"
+    version: "v1.1"
+    content: "你是用户的朋友，用轻松的语气聊天。"
+
+models:
+  - name: "weclone-local"
+    host: "http://127.0.0.1:8005/v1"
+    api_key: "sk-test"
+    params:
+      model: "gpt-3.5-turbo"
+      temperature: 0.7
+      max_tokens: 512
+  
+  - name: "deepseek-v3"
+    host: "https://openrouter.ai/api/v1"
+    api_key: "${OPENROUTER_API_KEY}"
+    params:
+      model: "deepseek/deepseek-chat-v3-0324"
+      temperature: 0.5
+      max_tokens: 1024
+      top_p: 0.9
+
+cases:
+  - file: "dataset/test_data.json"
+  - file: "dataset/additional_cases.jsonl"
+
+metrics:
+  - "interaction_fluency"
+  - "sentiment_satisfaction"
+  - "latency"
+  - "cost"
+
+benchmark_configs:
+  cost:
+    model_pricing:
+      "deepseek/deepseek-chat-v3-0324":
+        prompt: 0.0014
+        completion: 0.0028
+    excellent_cost_per_token: 0.000005
+
+debug:
+  max_cases: 5
+
+parallel: 2
+max_usd: 5.0
+timeout_seconds: 60
+output_formats: ["csv", "json"]
+```
+
+### 输出结果
+
+评估结果保存在 `eval_runs/<时间戳>/` 目录：
+
+```
+eval_runs/20241201T143022Z_a1b2c3d4/
+├── run_meta.json              # 运行元数据和配置
+├── dataset.csv                # 完整对话数据集
+├── benchmark_results.csv      # 所有基准指标
+└── latency_cost.csv          # 延迟和成本汇总
+```
+
+#### CSV 输出格式
+
+**benchmark_results.csv**:
+```csv
+run_id,conv_id,model,prompt,benchmark,metric,value
+20241201T143022Z_a1b2c3d4,0,deepseek:chat-v3,default_system,latency,full_response_ms,1234.56
+20241201T143022Z_a1b2c3d4,0,deepseek:chat-v3,default_system,cost,usd_cost,0.0028
+```
+
+**latency_cost.csv**:
+```csv
+run_id,conv_id,model,n_tokens_prompt,n_tokens_completion,latency_ms,cost_usd
+20241201T143022Z_a1b2c3d4,0,deepseek:chat-v3,45,128,1234.56,0.0028
+```
+
+### 自定义基准
+
+创建自定义评估基准：
+
+```python
+from weclone.eval.benchmark.base import BaseBenchmark, BenchmarkResult
+from weclone.eval.framework import JobContext
+
+class CustomBenchmark(BaseBenchmark):
+    @property 
+    def name(self) -> str:
+        return "custom_benchmark"
+    
+    def required_artifacts(self) -> List[str]:
+        return ["conversation_text"]
+        
+    def compute(self, job_ctx: JobContext) -> BenchmarkResult:
+        # 自定义评估逻辑
+        metrics = {"custom_metric": 0.85}
+        return BenchmarkResult(
+            benchmark_name=self.name,
+            metrics=metrics
+        )
+```
+
+在 `weclone/eval/benchmark/__init__.py` 中注册：
+```python
+AVAILABLE_BENCHMARKS = {
+    # ... 现有基准
+    'custom_benchmark': CustomBenchmark
+}
+```
+
+### 集成工作流
+
+评估框架与 WeClone 其他组件无缝集成：
+
+1. **训练后评估**: 微调完成后自动评估模型性能
+2. **A/B 测试**: 比较不同模型、参数配置的效果
+3. **持续监控**: 定期评估生产环境模型表现
+4. **模型选择**: 基于评估结果选择最佳模型配置
+
 ## 🔧 典型工作流程
 
 ### 完整的数字分身创建流程:
