@@ -85,18 +85,31 @@ class EvaluationFramework:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         return f"{timestamp}_{uuid.uuid4().hex[:8]}"
     
-    def _load_test_cases(self) -> List[TestCase]:
-        """Load test cases from configuration"""
+    def load_cases_from_files(self) -> List[TestCase]:
+        """Load test cases from configuration files with automatic format detection"""
         test_cases = []
         cases_config = self.config.get("cases", [])
         
         for case_config in cases_config:
             if isinstance(case_config, dict) and "file" in case_config:
-                cases_file = Path(case_config["file"])
-                if cases_file.suffix == ".jsonl":
-                    test_cases.extend(self._load_jsonl_cases(cases_file))
-                elif cases_file.suffix == ".json":
-                    test_cases.extend(self._load_json_cases(cases_file))
+                file_path = Path(case_config["file"])
+                
+                # Load based on file extension
+                if file_path.suffix.lower() == ".json":
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    
+                    questions = data.get("questions", [])
+                    for i, question_set in enumerate(questions):
+                        turns = []
+                        # Add all user inputs first
+                        for question in question_set:
+                            turns.append({"role": "user", "content": question})
+                        # Add one assistant response placeholder at the end
+                        turns.append({"role": "assistant", "content": ""})
+                        test_cases.append(TestCase(conv_id=str(i), turns=turns))
+                else:
+                    raise ValueError(f"Unsupported file format: {file_path.suffix}")
         
         # Support debug mode with limited test cases
         debug_limit = self.config.get("debug", {}).get("max_cases", None)
@@ -106,35 +119,114 @@ class EvaluationFramework:
         
         return test_cases
     
-    def _load_jsonl_cases(self, file_path: Path) -> List[TestCase]:
-        """Load test cases from JSONL file"""
-        cases = []
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for i, line in enumerate(f):
-                data = json.loads(line.strip())
-                turns = []
-                for turn in data.get("conversation", []):
-                    turns.append({"role": turn["role"], "content": turn["content"]})
-                cases.append(TestCase(conv_id=str(i), turns=turns))
-        return cases
-    
-    def _load_json_cases(self, file_path: Path) -> List[TestCase]:
-        """Load test cases from JSON file (compatible with existing test_data.json)"""
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+    def save_all_results(self, results: List[Dict[str, Any]], completed_test_cases: List[TestCase]):
+        """Save all evaluation results in a single unified table"""
+        # Save run metadata
+        metadata = {
+            "run_id": self.run_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "config": self.config,
+            "enabled_benchmarks": list(self.benchmarks.keys()),
+            "benchmark_descriptions": {
+                name: benchmark.get_description() 
+                for name, benchmark in self.benchmarks.items()
+            }
+        }
         
-        cases = []
-        questions = data.get("questions", [])
-        for i, question_set in enumerate(questions):
-            turns = []
-            # Add all user inputs first
-            for question in question_set:
-                turns.append({"role": "user", "content": question})
-            # Add one assistant response placeholder at the end
-            turns.append({"role": "assistant", "content": ""})
-            cases.append(TestCase(conv_id=str(i), turns=turns))
+        # Save metadata as JSON
+        metadata_path = self.output_dir / "run_meta.json"
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
         
-        return cases
+        # Prepare unified results table
+        unified_rows = []
+        
+        # Create a mapping from conv_id to completed test case for easy lookup
+        case_map = {case.conv_id: case for case in completed_test_cases}
+        
+        # prepare data for saving to csv
+        for result in results:
+            conv_id = result["conv_id"]
+            test_case = case_map.get(conv_id)
+            
+            # Basic info
+            row = {
+                "run_id": self.run_id,
+                "conv_id": conv_id,
+                "model": result["model"],
+                "prompt": result["prompt"],
+            }
+            
+            # Input: combine all user messages
+            user_messages = []
+            assistant_message = ""
+            if test_case:
+                for turn in test_case.turns:
+                    if turn["role"] == "user":
+                        user_messages.append(turn["content"])
+                    elif turn["role"] == "assistant" and turn["content"]:
+                        assistant_message = turn["content"]
+            
+            row["input"] = " | ".join(user_messages)  # Join multiple user inputs
+            row["output"] = assistant_message
+            
+            # Response metadata
+            response_data = result.get("response_data", {})
+            token_usage = response_data.get("token_usage", {})
+            row["prompt_tokens"] = token_usage.get("prompt_tokens", 0)
+            row["completion_tokens"] = token_usage.get("completion_tokens", 0)
+            row["latency_ms"] = response_data.get("total_time_ms", 0)
+            
+            # Add all benchmark scores dynamically
+            benchmark_results = result.get("benchmark_results", {})
+            for benchmark_name, benchmark_result in benchmark_results.items():
+                if hasattr(benchmark_result, 'metrics'):
+                    for metric_name, metric_value in benchmark_result.metrics.items():
+                        # Create column name like "chathumanscore_nat_score"
+                        column_name = f"{benchmark_name}_{metric_name}"
+                        row[column_name] = metric_value
+            
+            # Add GPT judge outputs to the row
+            gpt_judge_outputs = result.get("gpt_judge_outputs", [])
+            if gpt_judge_outputs:
+                # Convert judge data to JSON string for storage in CSV
+                judge_data = gpt_judge_outputs[0].get("judge_data", {})
+                row["gpt_judge_output"] = json.dumps(judge_data, ensure_ascii=False)
+            else:
+                row["gpt_judge_output"] = ""
+            
+            unified_rows.append(row)
+        
+        # Convert to list format for CSV saving
+        if unified_rows:
+            # Get all unique column names
+            all_columns = set()
+            for row in unified_rows:
+                all_columns.update(row.keys())
+            
+            # Sort columns for consistent output
+            fixed_columns = ["run_id", "conv_id", "model", "prompt", "input", "output", 
+                           "prompt_tokens", "completion_tokens", "latency_ms"]
+            benchmark_columns = sorted([col for col in all_columns if col not in fixed_columns and col != "gpt_judge_output"])
+            header = fixed_columns + benchmark_columns + ["gpt_judge_output"]
+            
+            # Convert rows to list format
+            csv_rows = []
+            for row in unified_rows:
+                csv_row = [row.get(col, "") for col in header]
+                csv_rows.append(csv_row)
+            
+            # Save unified results as CSV
+            results_path = self.output_dir / "results.csv"
+            with open(results_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                writer.writerows(csv_rows)
+            
+            logger.info(f"Saved {len(unified_rows)} results with {len(header)} columns")
+            logger.info(f"Columns: {', '.join(header)}")
+        else:
+            logger.info("No results to save")
     
     async def _run_conversation(self, model_config: ModelConfig, prompt_config: PromptConfig, test_case: TestCase) -> Dict[str, Any]:
         """Run a single conversation with timing and token tracking"""
@@ -228,145 +320,13 @@ class EvaluationFramework:
             artifacts=artifacts
         )
     
-    def _save_run_metadata(self):
-        """Save run metadata"""
-        metadata = {
-            "run_id": self.run_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "config": self.config,
-            "enabled_benchmarks": list(self.benchmarks.keys()),
-            "benchmark_descriptions": {
-                name: benchmark.get_description() 
-                for name, benchmark in self.benchmarks.items()
-            }
-        }
-        
-        with open(self.output_dir / "run_meta.json", 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
-    
-    def _save_dataset_csv(self, test_cases: List[TestCase]):
-        """Save dataset in CSV format"""
-        with open(self.output_dir / "dataset.csv", 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(["conv_id", "turn_idx", "role", "content"])
-            
-            total_turns = 0
-            assistant_responses = 0
-            user_inputs = 0
-            
-            for case in test_cases:
-                for turn_idx, turn in enumerate(case.turns):
-                    writer.writerow([case.conv_id, turn_idx, turn["role"], turn["content"]])
-                    total_turns += 1
-                    if turn["role"] == "assistant" and turn["content"]:
-                        assistant_responses += 1
-                    elif turn["role"] == "user":
-                        user_inputs += 1
-            
-            logger.info(f"Dataset saved: {len(test_cases)} conversations, {total_turns} total turns")
-            logger.info(f"  - User inputs: {user_inputs}")
-            logger.info(f"  - Assistant responses: {assistant_responses}")
-            logger.info(f"  - Empty assistant responses: {total_turns - user_inputs - assistant_responses}")
-    
-    def _save_benchmark_results_csv(self, results: List[Dict[str, Any]]):
-        """Save benchmark results in CSV format"""
-        with open(self.output_dir / "benchmark_results.csv", 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(["run_id", "conv_id", "model", "prompt", "benchmark", "metric", "value"])
-            
-            for result in results:
-                for benchmark_name, benchmark_result in result["benchmark_results"].items():
-                    for metric_name, metric_value in benchmark_result.metrics.items():
-                        writer.writerow([
-                            self.run_id,
-                            result["conv_id"],
-                            result["model"],
-                            result["prompt"],
-                            benchmark_name,
-                            metric_name,
-                            metric_value
-                        ])
-    
-    def _save_latency_cost_csv(self, results: List[Dict[str, Any]]):
-        """Save latency and cost data in CSV format"""
-        with open(self.output_dir / "latency_cost.csv", 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(["run_id", "conv_id", "model", "n_tokens_prompt", "n_tokens_completion", "latency_ms", "cost_usd"])
-            
-            for result in results:
-                latency_result = result["benchmark_results"].get("latency")
-                cost_result = result["benchmark_results"].get("cost")
-                
-                latency_ms = latency_result.metrics.get("full_response_ms", 0) if latency_result else 0
-                prompt_tokens = cost_result.metrics.get("prompt_tokens", 0) if cost_result else 0
-                completion_tokens = cost_result.metrics.get("completion_tokens", 0) if cost_result else 0
-                cost_usd = cost_result.metrics.get("usd_cost", 0) if cost_result else 0
-                
-                writer.writerow([
-                    self.run_id,
-                    result["conv_id"],
-                    result["model"],
-                    prompt_tokens,
-                    completion_tokens,
-                    latency_ms,
-                    cost_usd
-                ])
-    
-    def _save_gpt_judge_outputs(self, results: List[Dict[str, Any]]):
-        """Save GPT judge outputs for debugging"""
-        gpt_judge_dir = self.output_dir / "gpt_judge_outputs"
-        gpt_judge_dir.mkdir(exist_ok=True)
-        
-        # 保存所有 GPT judge 输出到单独的文件
-        all_judge_data = []
-        for result in results:
-            gpt_judge_outputs = result.get("gpt_judge_outputs", [])
-            for judge_output in gpt_judge_outputs:
-                all_judge_data.append(judge_output)
-        
-        if all_judge_data:
-            # 保存为 JSON 文件
-            with open(gpt_judge_dir / "all_judge_outputs.json", 'w', encoding='utf-8') as f:
-                json.dump(all_judge_data, f, indent=2, ensure_ascii=False)
-            
-            # 保存为 JSONL 文件（每行一个judge输出，便于查看）
-            with open(gpt_judge_dir / "judge_outputs.jsonl", 'w', encoding='utf-8') as f:
-                for judge_data in all_judge_data:
-                    f.write(json.dumps(judge_data, ensure_ascii=False) + '\n')
-            
-            # 保存为可读的文本文件
-            with open(gpt_judge_dir / "judge_outputs_readable.txt", 'w', encoding='utf-8') as f:
-                for i, judge_data in enumerate(all_judge_data):
-                    f.write(f"=== Judge Output {i+1} ===\n")
-                    f.write(f"Conversation ID: {judge_data['conv_id']}\n")
-                    f.write(f"Model: {judge_data['model']}\n")
-                    f.write(f"Prompt: {judge_data['prompt']}\n")
-                    f.write(f"Judge Model: {judge_data['judge_data']['model']}\n")
-                    f.write(f"\n--- Conversation Context ---\n")
-                    f.write(f"{judge_data['judge_data']['conversation_context']}\n")
-                    f.write(f"\n--- Assistant Response ---\n")
-                    f.write(f"{judge_data['judge_data']['assistant_text']}\n")
-                    f.write(f"\n--- Judge Prompt ---\n")
-                    f.write(f"{judge_data['judge_data']['prompt']}\n")
-                    f.write(f"\n--- Judge Response ---\n")
-                    f.write(f"{judge_data['judge_data']['response']}\n")
-                    f.write(f"\n{'='*50}\n\n")
-            
-            logger.info(f"Saved {len(all_judge_data)} GPT judge outputs to: {gpt_judge_dir}")
-        else:
-            logger.info("No GPT judge outputs to save")
-    
     async def run_evaluation(self):
         """Run the complete evaluation"""
         logger.info(f"Starting evaluation run: {self.run_id}")
         
         # Load test cases
-        test_cases = self._load_test_cases()
+        test_cases = self.load_cases_from_files()
         logger.info(f"Loaded {len(test_cases)} test cases")
-        
-        # Save metadata and initial dataset (before responses)
-        self._save_run_metadata()
-        logger.debug("Saved run metadata")
         
         # Prepare model and prompt configurations
         models = [ModelConfig(**m) for m in self.config.get("models", [])]
@@ -438,15 +398,9 @@ class EvaluationFramework:
                         
                         pbar.update(1)
         
-        # Save complete dataset with responses
-        logger.info("Saving complete dataset with model responses")
-        self._save_dataset_csv(completed_test_cases)
-        
-        # Save results
-        logger.info("Saving benchmark results and costs")
-        self._save_benchmark_results_csv(results)
-        self._save_latency_cost_csv(results)
-        self._save_gpt_judge_outputs(results)
+        # Save all results using the unified method
+        logger.info("Saving all results")
+        self.save_all_results(results, completed_test_cases)
         
         logger.info(f"Evaluation complete. Results saved to: {self.output_dir}")
         logger.info(f"Total conversations processed: {len(completed_test_cases)}")
