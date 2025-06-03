@@ -312,6 +312,50 @@ class EvaluationFramework:
                     cost_usd
                 ])
     
+    def _save_gpt_judge_outputs(self, results: List[Dict[str, Any]]):
+        """Save GPT judge outputs for debugging"""
+        gpt_judge_dir = self.output_dir / "gpt_judge_outputs"
+        gpt_judge_dir.mkdir(exist_ok=True)
+        
+        # 保存所有 GPT judge 输出到单独的文件
+        all_judge_data = []
+        for result in results:
+            gpt_judge_outputs = result.get("gpt_judge_outputs", [])
+            for judge_output in gpt_judge_outputs:
+                all_judge_data.append(judge_output)
+        
+        if all_judge_data:
+            # 保存为 JSON 文件
+            with open(gpt_judge_dir / "all_judge_outputs.json", 'w', encoding='utf-8') as f:
+                json.dump(all_judge_data, f, indent=2, ensure_ascii=False)
+            
+            # 保存为 JSONL 文件（每行一个judge输出，便于查看）
+            with open(gpt_judge_dir / "judge_outputs.jsonl", 'w', encoding='utf-8') as f:
+                for judge_data in all_judge_data:
+                    f.write(json.dumps(judge_data, ensure_ascii=False) + '\n')
+            
+            # 保存为可读的文本文件
+            with open(gpt_judge_dir / "judge_outputs_readable.txt", 'w', encoding='utf-8') as f:
+                for i, judge_data in enumerate(all_judge_data):
+                    f.write(f"=== Judge Output {i+1} ===\n")
+                    f.write(f"Conversation ID: {judge_data['conv_id']}\n")
+                    f.write(f"Model: {judge_data['model']}\n")
+                    f.write(f"Prompt: {judge_data['prompt']}\n")
+                    f.write(f"Judge Model: {judge_data['judge_data']['model']}\n")
+                    f.write(f"\n--- Conversation Context ---\n")
+                    f.write(f"{judge_data['judge_data']['conversation_context']}\n")
+                    f.write(f"\n--- Assistant Response ---\n")
+                    f.write(f"{judge_data['judge_data']['assistant_text']}\n")
+                    f.write(f"\n--- Judge Prompt ---\n")
+                    f.write(f"{judge_data['judge_data']['prompt']}\n")
+                    f.write(f"\n--- Judge Response ---\n")
+                    f.write(f"{judge_data['judge_data']['response']}\n")
+                    f.write(f"\n{'='*50}\n\n")
+            
+            logger.info(f"Saved {len(all_judge_data)} GPT judge outputs to: {gpt_judge_dir}")
+        else:
+            logger.info("No GPT judge outputs to save")
+    
     async def run_evaluation(self):
         """Run the complete evaluation"""
         logger.info(f"Starting evaluation run: {self.run_id}")
@@ -351,10 +395,25 @@ class EvaluationFramework:
                             
                             # Compute benchmark results
                             benchmark_results = {}
+                            gpt_judge_outputs = []  # 收集 GPT judge 输出用于保存
                             for benchmark_name, benchmark in self.benchmarks.items():
                                 try:
                                     result = benchmark.compute(job_ctx)
                                     benchmark_results[benchmark_name] = result
+                                    
+                                    # 如果是 ChatHumanScore benchmark 且有 GPT judge 输出，收集它
+                                    if (benchmark_name == 'chathumanscore' and 
+                                        hasattr(result, 'metadata') and 
+                                        result.metadata and 
+                                        'raw_judge_output' in result.metadata):
+                                        gpt_judge_output = result.metadata['raw_judge_output']
+                                        gpt_judge_outputs.append({
+                                            'conv_id': test_case.conv_id,
+                                            'model': model_config.name,
+                                            'prompt': prompt_config.id,
+                                            'judge_data': gpt_judge_output
+                                        })
+                                    
                                     logger.debug(f"Computed {benchmark_name} for case {test_case.conv_id}: {result.metrics}")
                                 except Exception as e:
                                     logger.error(f"Error computing {benchmark_name}: {e}")
@@ -368,7 +427,8 @@ class EvaluationFramework:
                                 "model": model_config.name,
                                 "prompt": prompt_config.id,
                                 "benchmark_results": benchmark_results,
-                                "response_data": response_data
+                                "response_data": response_data,
+                                "gpt_judge_outputs": gpt_judge_outputs  # 添加 GPT judge 输出
                             })
                             
                             logger.debug(f"Completed evaluation for case {test_case.conv_id}")
@@ -386,6 +446,7 @@ class EvaluationFramework:
         logger.info("Saving benchmark results and costs")
         self._save_benchmark_results_csv(results)
         self._save_latency_cost_csv(results)
+        self._save_gpt_judge_outputs(results)
         
         logger.info(f"Evaluation complete. Results saved to: {self.output_dir}")
         logger.info(f"Total conversations processed: {len(completed_test_cases)}")
