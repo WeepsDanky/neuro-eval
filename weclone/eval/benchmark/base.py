@@ -16,7 +16,7 @@ class BenchmarkResult:
     metadata: Dict[str, Any] = None
     
     def __post_init__(self):
-        if self.metadata is None:c
+        if self.metadata is None:
             self.metadata = {}
 
 

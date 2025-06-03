@@ -1,65 +1,5 @@
 """
 ChatHumanScore Benchmark
-
-Measures the "human-like" quality of conversational AI responses in casual chat scenarios.
-Uses GPT-Judge for intelligent evaluation across four key dimensions.
-
-评估标准详细说明 (Evaluation Criteria):
-
-**评估方法: GPT-Judge**
-使用大语言模型作为评委，对AI回复进行智能化、多维度评估。
-
-**四个核心评估维度:**
-
-1. **nat_score (自然度分数, 0-1)**: 评估回复语言的自然性和口语化程度
-   - 评估要素:
-     * 语气词使用: 啊、呀、吧、呢、嗯、哦、哈等
-     * 表情符号和emoji的恰当使用
-     * 口头语、网络梗、流行语的自然融入
-     * 标点符号的口语化使用（如连续感叹号、省略号等）
-     * 避免过于正式或官方的表达方式
-   - GPT-Judge会根据语言的流畅度、亲切感、口语化程度综合评分
-
-2. **bio_score (情感对齐分数, 0-1)**: 评估回复与用户情感的匹配程度
-   - 评估要素:
-     * 情绪识别: 准确捕捉用户的情感状态
-     * 情感回应: 回复情感与用户情感的协调性
-     * 共情能力: 是否能理解和回应用户的感受
-     * 情绪感染力: 能否通过回复影响用户情绪
-   - GPT-Judge会分析对话上下文，判断情感匹配的恰当性
-
-3. **psycho_score (人格一致性分数, 0-1)**: 评估回复是否符合一致的性格特征
-   - 评估要素:
-     * 语言风格一致性: 措辞、表达习惯的连贯性
-     * 行为模式: 反应方式、处事态度的一致性
-     * 价值观表达: 观点、立场的稳定性
-     * 个性化特征: 独特的语言标识和个人特色
-   - GPT-Judge会检查AI是否展现出连贯、可信的"人格"
-
-4. **social_score (社交适应性分数, 0-1)**: 评估回复在社交语境中的恰当性
-   - 评估要素:
-     * 话题相关性: 回复与对话主题的关联度
-     * 社交礼仪: 礼貌用语、社交规范的遵循
-     * 场合适宜性: 语言风格与对话场景的匹配
-     * 互动自然度: 对话的流畅性和参与感
-     * 社交边界: 对隐私、敏感话题的适当处理
-
-**评分机制:**
-- GPT-Judge输出JSON格式结果，包含各维度分数(0-1)和详细reasoning
-- 综合评分: (nat_score × 0.25 + bio_score × 0.25 + psycho_score × 0.25 + social_score × 0.25) × 10
-- 取值范围: 0-10分
-
-**技术特性:**
-- 语义理解: 能够理解复杂的语境、隐含意思、讽刺等高级语言现象
-- 灵活适应: 自动适应新梗、新表达、新的社交语境，无需手动更新词典
-- 推理能力: 能够进行多轮对话的逻辑推理和性格一致性判断
-- 可解释性: 提供详细的评分理由和改进建议，便于模型优化
-
-**配置要求:**
-- 必须配置有效的OpenAI API密钥 (openai_api_key)
-- 建议使用GPT-4或GPT-4-turbo模型以获得最佳评估效果
-- 支持自定义评分权重和评估prompt风格
-
 """
 
 import json
@@ -69,7 +9,6 @@ from .base import BaseBenchmark, BenchmarkResult
 from .prompt import format_judge_prompt # 导入格式化prompt
 from ..types import JobContext
 import openai
-
 
 class ChatHumanScore(BaseBenchmark):
     """Evaluates human-like quality in casual conversations using GPT-Judge"""
