@@ -99,25 +99,6 @@ def web_demo():
 
     web_demo_main()
 
-
-# TODO 添加评估功能 @cli.command("eval-model", help="使用从训练数据中划分出来的验证集评估。")
-@apply_common_decorators()
-def eval_model():
-    """使用从训练数据中划分出来的验证集评估。"""
-    from weclone.eval.eval_model import main as evaluate_main
-
-    evaluate_main()
-
-
-@cli.command("test-model", help="使用常见聊天问题测试模型。")
-@apply_common_decorators()
-def test_model():
-    """测试"""
-    from weclone.eval.test_model import main as test_main
-
-    test_main()
-
-
 @cli.command("eval-framework", help="运行综合评估框架，支持多指标、多模型、多提示词的全面评估。")
 @click.option(
     '--config', '-c',
@@ -138,50 +119,7 @@ def eval_framework(config: Path):
         results = asyncio.run(run_evaluation_from_config(str(config)))
         
         logger.info(f"评估完成，共处理 {len(results)} 个测试用例")
-        
-        # Print summary
-        print("\n" + "="*60)
-        print("评估结果摘要")
-        print("="*60)
-        
-        models = set(r["model"] for r in results)
-        prompts = set(r["prompt"] for r in results)
-        
-        print(f"测试模型: {', '.join(models)}")
-        print(f"测试提示词: {', '.join(prompts)}")
-        print(f"总测试用例: {len(results)}")
-        
-        # Calculate average metrics
-        if results:
-            avg_metrics = {}
-            for result in results:
-                for benchmark_name, benchmark_result in result["benchmark_results"].items():
-                    if benchmark_name not in avg_metrics:
-                        avg_metrics[benchmark_name] = {}
-                    for metric_name, metric_value in benchmark_result.metrics.items():
-                        if isinstance(metric_value, (int, float)):
-                            if metric_name not in avg_metrics[benchmark_name]:
-                                avg_metrics[benchmark_name][metric_name] = []
-                            avg_metrics[benchmark_name][metric_name].append(metric_value)
-            
-            print("\n平均指标:")
-            metric_names = {
-                "interaction_fluency": "互动流畅度",
-                "sentiment_satisfaction": "情感满意度", 
-                "task_success": "任务成功率",
-                "latency": "延迟",
-                "cost": "成本"
-            }
-            
-            for benchmark_name, metrics in avg_metrics.items():
-                display_name = metric_names.get(benchmark_name, benchmark_name)
-                print(f"  {display_name} ({benchmark_name}):")
-                for metric_name, values in metrics.items():
-                    avg_value = sum(values) / len(values) if values else 0
-                    print(f"    {metric_name}: {avg_value:.3f}")
-        
-        print("="*60)
-        print(f"详细结果已保存到 eval_runs/ 目录")
+        logger.info(f"结果已保存到 eval_runs/ 目录")
         
     except Exception as e:
         logger.error(f"评估失败: {e}")
