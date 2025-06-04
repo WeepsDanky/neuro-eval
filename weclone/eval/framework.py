@@ -120,7 +120,7 @@ class EvaluationFramework:
         return test_cases
     
     def save_all_results(self, results: List[Dict[str, Any]], completed_test_cases: List[TestCase]):
-        """Save all evaluation results in a single unified table"""
+        """把所有输入和输出数据保存在一个 csv 中, 包括所有指标和 judge 输出， 一行对应一个 case/model/prompt 组合"""
         # Save run metadata
         metadata = {
             "run_id": self.run_id,
@@ -229,7 +229,7 @@ class EvaluationFramework:
             logger.info("No results to save")
     
     async def _run_conversation(self, model_config: ModelConfig, prompt_config: PromptConfig, test_case: TestCase) -> Dict[str, Any]:
-        """Run a single conversation with timing and token tracking"""
+        """Run a single conversation with timing and token tracking, 返回 response_data 和 gpt_judge_outputs"""
         start_time = time.time()
         
         # Initialize OpenAI client
@@ -321,7 +321,7 @@ class EvaluationFramework:
         )
     
     async def run_evaluation(self):
-        """Run the complete evaluation"""
+        """Run the complete evaluation, 返回 results 和 completed_test_cases"""
         logger.info(f"Starting evaluation run: {self.run_id}")
         
         # Load test cases
