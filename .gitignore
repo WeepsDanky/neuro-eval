@@ -161,6 +161,7 @@ data/test
 .vscode
 *-my*.*
 *.csv
+!tests/tests_data/test_person/test_0_730.csv
 *test.*
 *users.json   
 Spark-TTS-0.5B/
@@ -173,3 +174,7 @@ settings.jsonc
 settings.json
 dataset/blocked_words.json
 dataset/wechat/*
+dataset/media/*
+models/*
+.secrets*
+.env*
